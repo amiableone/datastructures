@@ -1,6 +1,7 @@
 import time
 from typing import List, Tuple, Optional
 from collections.abc import Sequence
+from re import sub as re_sub
 
 
 def timer(func):
@@ -295,12 +296,13 @@ class TreeNode:
 
 
 class BSTNode(TreeNode):
-    def __init__(self, key, value=None):
+    def __init__(self, key, value=None, parent=None):
         super().__init__(key, value)
         self.left: Optional[BSTNode] = None
         self.right: Optional[BSTNode] = None
-        self.parent: Optional[BSTNode] = None
+        self.parent: Optional[BSTNode] = parent
         self._size: int = 1
+        BSTNode._adjust_size(self.parent, upward=True)
 
     def __repr__(self):
         return f"<BinarySearchTree: {self.to_tuple()}>"
@@ -348,7 +350,7 @@ class BSTNode(TreeNode):
         if self.key < key:
             return BSTNode.find(self.right, key)
 
-    def insert(self, key, value=None):
+    def insert(self, key, value=None, parent=None):
         """
         Insert the key-value pair in a new node
         or raise KeyError if key already exists.
@@ -357,22 +359,23 @@ class BSTNode(TreeNode):
         WARNING: Don't use with non-root node.
         """
         if self is None:
-            return BSTNode(key, value)
+            return BSTNode(key, value, parent)
 
         if self.key > key:
-            self.left = BSTNode.insert(self.left, key, value)
-            self.left.parent = self
+            self.left = BSTNode.insert(
+                self.left, key, value, self
+            )
 
         elif self.key < key:
-            self.right = BSTNode.insert(self.right, key, value)
-            self.right.parent = self
+            self.right = BSTNode.insert(
+                self.right, key, value, self
+            )
 
         else:
             raise KeyError(
                 f"Key {key} already exists."
             )
 
-        self._size += 1
         return self
 
     def update(self, key, value=None):
@@ -420,10 +423,10 @@ class BSTNode(TreeNode):
             if not self.parent:
                 self.key, self.value = None, None
             elif self.parent.left is self:
-                self._correct_size()
+                self._adjust_size()
                 self.parent.left = None
             else:
-                self._correct_size()
+                self._adjust_size()
                 self.parent.right = None
 
         elif length_l >= length_r:
@@ -443,7 +446,7 @@ class BSTNode(TreeNode):
                 filler = filler.right
 
         self.key, self.value = filler.key, filler.value
-        filler._correct_size()
+        filler._adjust_size()
 
         # Replace the node filler points to with its
         # left child. Question is whether it's left or
@@ -464,23 +467,26 @@ class BSTNode(TreeNode):
                 filler = filler.left
 
         self.key, self.value = filler.key, filler.value
-        filler._correct_size()
+        filler._adjust_size()
 
         if filler.parent is self:
             filler.parent.right = filler.right
         else:
             filler.parent.left = filler.right
 
-    def _correct_size(self):
+    def _adjust_size(self, upward=False):
         """
-        Decrement lengths of all ascendants of a node
+        Adjust lengths of all ascendants of a node
         up to the root by 1.
         """
+        if self is None:
+            return
+        adj = 1 if upward else -1
         parent = self.parent
-        parent._size -= 1
+        parent._size += adj
         while parent.parent:
             parent = parent.parent
-            parent._size -= 1
+            parent._size += adj
 
     def balance(self):
         """
@@ -507,16 +513,6 @@ class BSTNode(TreeNode):
             [(self.key, self.value)] +
             type(self).to_list(self.right)
         )
-
-    def make_bst(self):
-        """
-        Convert a tree into a BST.
-        Method `balance()` converts a tree into a BST, too.
-        """
-        # TODO:
-        #   Learn how heaps work. I suspect they might be
-        #   useful in converting a tree into a BST.
-        pass
 
     def _is_skewed(self):
         """
@@ -595,6 +591,46 @@ class BSTNode(TreeNode):
             res = super().from_tuple(data)
             return res
 
+    def to_bst(self, inplace=False, bst=None):
+        """
+        Convert a tree into a BST without balancing
+        like `balance()` does.
+        """
+        if self is None:
+            return bst
+
+        if inplace:
+            data_list = sorted(self.to_list())
+            idx = 0
+            paths = [None] * len(data_list)
+            path = ""
+            curr = self
+            while curr:
+                if curr.left:
+                    pre = curr.left
+                    while pre.right and pre.right != curr:
+                        pre = pre.right
+                    if not pre.right:
+                        pre.right = curr
+                        # TODO: _adjust_path()
+                        curr = curr.left
+                    else:
+                        paths[idx] = path
+                        idx += 1
+                        # TODO: _adjust_path()
+                        pre.right = None
+                        curr = curr.right
+                else:
+                    paths[idx] = path
+                    # TODO: _adjust_path()
+                    curr = curr.right
+
+        else:
+            bst = BSTNode.insert(bst, self.key, self.value)
+            bst = type(self).to_bst(self.left, inplace, bst)
+            bst = type(self).to_bst(self.right, inplace, bst)
+            return bst
+
     @staticmethod
     def _tree_tuple_to_list(data):
         if not isinstance(data, tuple):
@@ -616,17 +652,6 @@ class BSTNode(TreeNode):
     def _sort_tree_tuple(data):
         l, m, r = data
         pass
-
-    @classmethod
-    def _tree_tuple_structure(cls, data):
-        if not isinstance(data, tuple):
-            return
-
-        return (
-            cls._tree_tuple_structure(data[0]),
-            "",
-            cls._tree_tuple_structure(data[2])
-        )
 
 
 class TreeMap:

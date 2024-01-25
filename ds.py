@@ -302,7 +302,7 @@ class BSTNode(TreeNode):
         self.right: Optional[BSTNode] = None
         self.parent: Optional[BSTNode] = parent
         self._size: int = 1
-        BSTNode._adjust_size(self.parent, upward=True)
+        BSTNode._adjust_size(self, upward=True)
 
     def __repr__(self):
         return f"<BinarySearchTree: {self.to_tuple()}>"
@@ -455,6 +455,8 @@ class BSTNode(TreeNode):
             filler.parent.left = filler.left
         else:
             filler.parent.right = filler.left
+        if filler.left:
+            filler.left.parent = filler.parent
 
     def _replace_with_leftmost_node_of_right_subtree(self):
         """
@@ -473,6 +475,8 @@ class BSTNode(TreeNode):
             filler.parent.right = filler.right
         else:
             filler.parent.left = filler.right
+        if filler.right:
+            filler.right.parent = filler.parent
 
     def _adjust_size(self, upward=False):
         """
@@ -480,6 +484,8 @@ class BSTNode(TreeNode):
         up to the root by 1.
         """
         if self is None:
+            return
+        if self.parent is None:
             return
         adj = 1 if upward else -1
         parent = self.parent
@@ -582,28 +588,34 @@ class BSTNode(TreeNode):
         return node
 
     @classmethod
-    def from_tuple(cls, data, balanced=True):
-        if balanced:
-            data = cls._tree_tuple_to_list(data)
-            return cls.from_seq(data)
-        else:
-            data = cls._sort_tree_tuple(data)
-            res = super().from_tuple(data)
-            return res
+    def from_tuple(cls, data, parent=None):
+        if data is None:
+            node = None
 
-    def to_bst(self, inplace=False, bst=None):
+        elif isinstance(data, tuple) and len(data) == 3:
+            node = cls(data[1], parent=parent)
+            node.left = cls.from_tuple(data[0], node)
+            node.right = cls.from_tuple(data[2], node)
+
+        else:
+            node = cls(data)
+
+        return node
+
+    def to_bst(self, bst=None, inplace=False):
         """
         Convert a tree into a BST without balancing
         like `balance()` does.
+        The non-inplace algorithm puts keeps the root
+        node of the original tree the root node of the
+        resulting tree. Hence, different structure of
+        the new tree.
         """
         if self is None:
             return bst
 
         if inplace:
             data_list = sorted(self.to_list())
-            idx = 0
-            paths = [None] * len(data_list)
-            path = ""
             curr = self
             while curr:
                 if curr.left:
@@ -612,24 +624,55 @@ class BSTNode(TreeNode):
                         pre = pre.right
                     if not pre.right:
                         pre.right = curr
-                        # TODO: _adjust_path()
                         curr = curr.left
                     else:
-                        paths[idx] = path
-                        idx += 1
-                        # TODO: _adjust_path()
+                        data = data_list.pop(0)
+                        curr.key, curr.value = data
                         pre.right = None
                         curr = curr.right
                 else:
-                    paths[idx] = path
-                    # TODO: _adjust_path()
+                    data = data_list.pop(0)
+                    curr.key, curr.value = data
                     curr = curr.right
 
         else:
             bst = BSTNode.insert(bst, self.key, self.value)
-            bst = type(self).to_bst(self.left, inplace, bst)
-            bst = type(self).to_bst(self.right, inplace, bst)
+            bst = type(self).to_bst(self.left, bst, False)
+            bst = type(self).to_bst(self.right, bst, False)
             return bst
+
+    def paths(self):
+        paths = []
+        path = ""
+        curr = self
+        while curr:
+            if curr.left:
+                pre = curr.left
+                while pre.right and pre.right != curr:
+                    pre = pre.right
+                if not pre.right:
+                    pre.right = curr
+                    curr = curr.left
+                    path += "0"
+                else:
+                    paths.append(path + "-")
+                    if curr.right.parent is curr:
+                        path += "1"
+                    else:
+                        # curr.right is curr.parent or
+                        # curr is the rightmost node of
+                        # the left subtree of curr.right
+                        path = re_sub(r"01*$", "", path)
+                    pre.right = None
+                    curr = curr.right
+            else:
+                paths.append(path + "-")
+                if not curr.right or curr.right.parent is not curr:
+                    path = re_sub(r"01*$", "", path)
+                else:
+                    path += "1"
+                curr = curr.right
+        return paths
 
     @staticmethod
     def _tree_tuple_to_list(data):
@@ -647,11 +690,6 @@ class BSTNode(TreeNode):
                 [(m, m)] +
                 BSTNode._tree_tuple_to_list(r)
             )
-
-    @staticmethod
-    def _sort_tree_tuple(data):
-        l, m, r = data
-        pass
 
 
 class TreeMap:

@@ -1,9 +1,9 @@
+import time
+
 from ds import BSTNode, TreeMap, TreeNode
 from random import randint
 from typing import Optional
 from time import perf_counter
-
-tests = []
 
 
 def create_test(
@@ -20,11 +20,7 @@ def create_test(
         },
         "output": output
     }
-    global tests
-    if test not in tests:
-        tests.append(test)
-    else:
-        print("Test already in Tests")
+    return test
 
 
 data_for_tests = []
@@ -115,18 +111,20 @@ for i in [12, 5, 2, 0, 1, 3, 4, 8, 6, 7, 18, 15, 13, 14, 16, 17, 21, 19, 20, 23,
 data_for_tests.append((name7, treemap7, (9, 11, 10), output7))
 
 # Creating data for Test 8.
-name8 = "Deleting all nodes from a balanced tree"
+name8 = "Deleting all nodes in-order"
 
 treemap8 = TreeMap()
-treemap8.root = BSTNode.from_seq(sequence)
+for _ in range(25):
+    new = randint(0, 30)
+    treemap8[new] = str(new)
 
 output8 = TreeMap()
 output8.root = BSTNode(None, None)
 
-data_for_tests.append((name8, treemap8, "all", output8))
+data_for_tests.append((name8, treemap8, "inorder", output8))
 
 # Creating data for Test 9.
-name9 = "Deleting all nodes from a random tree"
+name9 = "Deleting all nodes pre-order"
 
 treemap9 = TreeMap()
 for _ in range(25):
@@ -136,7 +134,7 @@ for _ in range(25):
 output9 = TreeMap()
 output9.root = BSTNode(None, None)
 
-data_for_tests.append((name9, treemap9, "all", output9))
+data_for_tests.append((name9, treemap9, "preorder", output9))
 
 # Creating data for Test 10.
 name10 = "Deleting a node with a single child iteratively x3"
@@ -147,66 +145,68 @@ for i in range(5):
 
 output10 = TreeMap()
 output10.root = BSTNode(0, "0")
-output10.root.right = BSTNode(4, "4")
+output10.root.right = BSTNode(4, "4", parent=output10.root)
 
 data_for_tests.append((name10, treemap10, (3, 2, 1), output10))
 
 
-# Adding all created tests to `tests`
-for test_data in data_for_tests:
-    create_test(*test_data)
-
-
 def eval_test(name, inputs, output):
-    treemap, del_val = TreeMap(), inputs["del"]
-    treemap.root = TreeNode.from_tuple(inputs["map"].to_tuple())
+    treemap, del_val = inputs["map"], inputs["del"]
 
-    if isinstance(del_val, int):
-        treemap.root.delete(del_val)
-    elif isinstance(del_val, tuple):
-        for i in del_val:
-            treemap.root.delete(i)
-    else:
-        # del_val == "all"
-        kvlist = list(treemap)
-        for k, v in kvlist:
-            treemap.root.delete(k)
+    try:
+        if isinstance(del_val, int):
+            treemap.root.delete(del_val)
+        elif isinstance(del_val, tuple):
+            for i in del_val:
+                treemap.root.delete(i)
+        else:
+            # del_val == "inorder" or "preorder"
+            if del_val == "inorder":
+                del_vals = treemap.root.traverse_inorder()
+            else:
+                del_vals = treemap.root.traverse_preorder()
+            for val in del_vals:
+                treemap.root.delete(val)
 
-    return trees_eq(treemap.root, output.root, name)
+    except TypeError:
+        print(name)
+        treemap.display()
+        output.display()
+        raise
+
+    return trees_eq(treemap.root, output.root)
 
 
-def trees_eq(left, right, name, level=0):
+def trees_eq(left, right):
     if left is None and right is None:
         return True
 
     if left is None or right is None:
         return False
 
-    res = (
-        trees_eq(left.left, right.left, name, level+1) and
+    return (
+        trees_eq(left.left, right.left) and
         left.key == right.key and
         left.parent == right.parent and
         len(left) == len(right) and
-        trees_eq(left.right, right.right, name, level+1)
+        trees_eq(left.right, right.right)
     )
-
-    if not res and level == 0:
-        print(name)
-        print("   " * level, "Left ------------------------------")
-        left.display_keys()
-        print("   " * level, "Right -----------------------------")
-        right.display_keys()
-        print("\n")
-
-    return res
 
 
 def eval_all_tests():
-    for i, test_data in enumerate(tests):
+    tests = []
+    for test_data in data_for_tests:
+        test = create_test(*test_data)
+        tests.append(test)
+
+    results = []
+    for i, test in enumerate(tests):
         s = perf_counter()
-        res = eval_test(**test_data)
+        res = eval_test(**test)
         e = perf_counter() - s
-        print(f"Test {i}, {e / 10 ** 6:.4f} μs -> {res}")
+        print(f"Test {i + 1}, {e / 10 ** 6:.4f} μs -> {res}")
+        results.append(res)
+    return all(results)
 
 
-eval_all_tests()
+print(all([eval_all_tests() for _ in range(100)]))

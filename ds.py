@@ -1,6 +1,6 @@
 import time
-from typing import List, Tuple, Optional
-from collections.abc import Sequence
+from typing import List, Tuple, Optional, Union
+from collections.abc import Iterable
 from re import sub as re_sub
 
 
@@ -265,7 +265,7 @@ class TreeNode:
 
         return traversed
 
-    def traverse_breadth(self):
+    def bfs(self):
         if self is None:
             return []
         queue = [self]
@@ -280,7 +280,7 @@ class TreeNode:
 
         return [node.key for node in queue]
 
-    def rotate(self):
+    def mirror(self):
         if self is None:
             return
         queue = [self]
@@ -317,7 +317,19 @@ class BSTNode(TreeNode):
         return self._size
 
     def size(self):
-        return BSTNode.__len__(self)
+        """
+        This method complexity is O(n).
+        Use len(obj) which complexity is O(1).
+        """
+        if self is None:
+            return 0
+
+        self._size = (
+            type(self).size(self.left) +
+            1 +
+            type(self).size(self.right)
+        )
+        return self._size
 
     # TODO:
     #   Maybe `is_balanced()` now can be implemented
@@ -345,10 +357,10 @@ class BSTNode(TreeNode):
             return self
 
         if self.key > key:
-            return BSTNode.find(self.left, key)
+            return type(self).find(self.left, key)
 
         if self.key < key:
-            return BSTNode.find(self.right, key)
+            return type(self).find(self.right, key)
 
     def insert(self, key, value=None, parent=None):
         """
@@ -359,15 +371,19 @@ class BSTNode(TreeNode):
         WARNING: Don't use with non-root node.
         """
         if self is None:
-            return BSTNode(key, value, parent)
+            try:
+                return parent.__class__(key, value, parent)
+            except TypeError:
+                raise TypeError("Insertion to None is not"
+                                "supported.")
 
         if self.key > key:
-            self.left = BSTNode.insert(
+            self.left = type(self).insert(
                 self.left, key, value, self
             )
 
         elif self.key < key:
-            self.right = BSTNode.insert(
+            self.right = type(self).insert(
                 self.right, key, value, self
             )
 
@@ -387,11 +403,6 @@ class BSTNode(TreeNode):
         node = self.find(key)
         node.value = value
 
-    # TODO:
-    #   1. Something's wrong with delete again.
-    #   2. Define __delete__ for both BSTNode
-    #      and TreeMap.
-
     def delete(self, key):
         if self is None:
             raise KeyError(f"Key {key} not found")
@@ -400,10 +411,10 @@ class BSTNode(TreeNode):
             self._fill_deleted_node()
 
         elif self.key > key:
-            BSTNode.delete(self.left, key)
+            type(self).delete(self.left, key)
 
         else:
-            BSTNode.delete(self.right, key)
+            type(self).delete(self.right, key)
 
     def _fill_deleted_node(self):
         """
@@ -416,8 +427,8 @@ class BSTNode(TreeNode):
         """
         # Choose a filler node from the longest
         # subtree, if any.
-        length_l = BSTNode.__len__(self.left)
-        length_r = BSTNode.__len__(self.right)
+        length_l = type(self).__len__(self.left)
+        length_r = type(self).__len__(self.right)
 
         if length_l == length_r == 0:
             if not self.parent:
@@ -501,7 +512,7 @@ class BSTNode(TreeNode):
         """
         data = self.to_list()
         if self.is_bst():
-            return type(self)._from_sorted_seq(data)
+            return type(self)._from_sorted(data)
 
         return type(self).from_seq(data)
 
@@ -537,35 +548,23 @@ class BSTNode(TreeNode):
         skewed = not balanced_l or not balanced_r or abs(height_diff) > 1
         return skewed, height_diff
 
-    def skew(self, direction="left"):
-        # left_right, bst.right.left, root, bst.right =\
-        #     bst.right.left, None, bst.right, None
-        # bst, bst.left, bst.left.right = root, bst, left_right
-        # bst.parent, bst.left.parent, bst.left.right.parent =\
-        #     None, bst, bst.left
-        pass
-
     @classmethod
     def from_seq(cls, data):
-        if not isinstance(data, Sequence):
+        if not isinstance(data, Iterable):
             return
 
         data = sorted(data)
-        return cls._from_sorted_seq(data)
+        return cls._from_sorted(data)
 
     @classmethod
-    def _from_sorted_seq(cls, data, lo=0, hi=None, parent=None):
+    def _from_sorted(cls, data, lo=0, hi=None, parent=None):
         """
         Create a Binary Tree from a sequence.
         For the tree to be a Binary Search Tree,
-        data has to be sorted.
+        data HAS TO BE sorted.
 
-        WARNING: Don't use this method with data
-        that is not sorted. This will return a tree
-        that is not a BST and most of its methods
-        will not work correctly with such a tree.
-
-        Use from_seq() to initialize a BST.
+        Using unsorted data will return a BSTNode
+        instance with methods not working correctly.
         """
         if data is None:
             return
@@ -577,13 +576,16 @@ class BSTNode(TreeNode):
             return
 
         mid = (lo + hi) // 2
-        key, value = data[mid]
+        try:
+            key, value = data[mid]
+        except TypeError:
+            key, value = data[mid], None
 
         node = cls(key, value)
         node.parent = parent
         node._size = hi - lo + 1
-        node.left = cls._from_sorted_seq(data, lo, mid - 1, node)
-        node.right = cls._from_sorted_seq(data, mid + 1, hi, node)
+        node.left = cls._from_sorted(data, lo, mid - 1, node)
+        node.right = cls._from_sorted(data, mid + 1, hi, node)
 
         return node
 
@@ -593,12 +595,22 @@ class BSTNode(TreeNode):
             node = None
 
         elif isinstance(data, tuple) and len(data) == 3:
-            node = cls(data[1], parent=parent)
+            try:
+                key, value = data[1]
+            except TypeError:
+                key, value = data[1], None
+
+            node = cls(key, value, parent=parent)
             node.left = cls.from_tuple(data[0], node)
             node.right = cls.from_tuple(data[2], node)
 
         else:
-            node = cls(data)
+            try:
+                key, value = data
+            except TypeError:
+                key, value = data, None
+
+            node = cls(key, value, parent=parent)
 
         return node
 
@@ -636,7 +648,7 @@ class BSTNode(TreeNode):
                     curr = curr.right
 
         else:
-            bst = BSTNode.insert(bst, self.key, self.value)
+            bst = type(self).insert(bst, self.key, self.value)
             bst = type(self).to_bst(self.left, bst, False)
             bst = type(self).to_bst(self.right, bst, False)
             return bst
@@ -692,33 +704,153 @@ class BSTNode(TreeNode):
             )
 
 
+class AVLNode(BSTNode):
+    def __init__(self, key, value=None, parent=None):
+        super().__init__(key, value, parent)
+        self.left: Optional[AVLNode] = None
+        self.right: Optional[AVLNode] = None
+        self.parent: Optional[AVLNode] = parent
+
+    def _rotate_left(self):
+        """
+        Node0[None, Node1[None, Node2]] ->
+        Node1[Node0, Node2].
+        """
+        root = self.right
+        root.parent = self.parent
+        self.right = None
+        root.left = self
+        root.left.parent = root
+        root.size()
+        return root
+
+    def _rotate_right(self):
+        """
+        Node2[Node1[Node0, None], None] ->
+        Node1[Node0, Node2].
+        """
+        root = self.left
+        root.parent = self.parent
+        self.left = None
+        root.right = self
+        root.right.parent = root
+        root.size()
+        return root
+
+    def _rotate_left_right(self):
+        """
+        Node2[Node0[None, Node1], None] ->
+        Node1[Node0, Node2]
+        """
+        self.left: AVLNode
+        self.left = self.left._rotate_left()
+        return self._rotate_right()
+
+    def _rotate_right_left(self):
+        """
+        Node0[None, Node2[Node1, None]] ->
+        Node1[Node0, Node2]
+        """
+        self.right: AVLNode
+        self.right = self.right._rotate_right()
+        return self._rotate_left()
+
+    def _rotate_single_child_node(self):
+        size_diff = self._size_diff()
+        if size_diff >= 2:
+            size_diff_l = self.left._size_diff()
+            if size_diff_l == 1:
+                return self._rotate_right()
+            elif size_diff_l == -1:
+                return self._rotate_left_right()
+        elif size_diff <= -2:
+            size_diff_r = self.right._size_diff()
+            if size_diff_r == 1:
+                return self._rotate_right_left()
+            elif size_diff_r == -1:
+                return self._rotate_left()
+        return
+
+    def _size_diff(self):
+        if self is None:
+            return 0
+
+        return (
+            type(self).__len__(self.left) -
+            type(self).__len__(self.right)
+        )
+
+    # def insert(self, key, value=None, parent=None):
+    #     super().insert(key, value, parent)
+    #     node = self.find(key)
+    #     node._rotate_after_insert()
+    #
+    # def _rotate_after_insert(self):
+    #     """Run on an inserted node"""
+    #     if not self.parent:
+    #         return
+    #
+    #     if not self.parent.parent:
+    #         return
+    #
+    #     ggp = self.parent.parent.parent
+    #     if not ggp:
+    #         root = self.parent.parent._rotate_single_child_node()
+    #         self.key, self.value, self.parent =\
+    #             root.key, root.value, root.parent
+    #     elif ggp.left is self.parent.parent:
+    #         ggp.left = ggp.left._rotate_single_child_node()
+    #     else:
+    #         ggp.right = ggp.right._rotate_single_child_node()
+
+
 class TreeMap:
-    def __init__(self):
-        self.root: Optional[BSTNode] = None
+    def __init__(self, tree_type=AVLNode):
+        self.root: Optional[tree_type] = None
+        self._root_type = tree_type
+        self._inserted_times: int = 0
 
     def __setitem__(self, key, value):
         try:
             self.root.update(key, value)
         except KeyError:
             self.root.insert(key, value)
+            if self._inserted_times >= 1000:
+                self.root.balance()
+                self._inserted_times = 0
+            else:
+                self._inserted_times += 1
         except AttributeError:
-            self.root = BSTNode(key, value)
+            self.root = self._root_type(key, value)
 
     def __getitem__(self, key):
         try:
-            value = self.root.find(key)
-            return value
+            node = self.root.find(key)
+            return node.value
 
         except (KeyError, AttributeError):
             raise KeyError(
                 f"Key {key} not found"
             )
 
+    def __delitem__(self, key):
+        try:
+            self.root.delete(key)
+        except KeyError:
+            return
+
     def __len__(self):
         return BSTNode.__len__(self.root)
 
     def __iter__(self):
         return (n for n in BSTNode.to_list(self.root))
+
+    def __contains__(self, key):
+        try:
+            self.root.find(key)
+            return True
+        except (KeyError, AttributeError):
+            return False
 
     def __repr__(self):
         return BSTNode.__repr__(self.root)
